@@ -8,6 +8,7 @@ library(priceR)
 # Source Files
 source('./params.R')
 source('./name-wrangling.R')
+source('./price-wrangling.R')
 
 # Results Data UK
 load(RI_DAILY_PATH)
@@ -77,255 +78,25 @@ z <- match(salesResults$FileName, yearlingCatalogs$FileName)
 salesResults$saleName <- yearlingCatalogs$saleName[z]
 salesResults$saleDate <- yearlingCatalogs$Date[z]
 
-# Wrangle the prices
-salesResults[, Price.GBP := as.numeric(Price.GBP)]
-salesResults[, Price.EU := as.numeric(Price.EU)]
+# Rename year to foalingYear
+names(salesResults)[names(salesResults) == 'Year'] <- 'foalingYear'
+# Match format
+salesResults[, foalingYear := as.numeric(foalingYear)]
+salesResults[foalingYear < 1000, foalingYear := foalingYear + 2000]
 
+# Get prices for all horses available in GBP
+salesResults <- wrangle_prices(salesResults)
 
-# Withdrawn Tag
-salesResults[, withdrawnTag := numeric()]
-# Vendor Buyback Tag
-salesResults[, vendorBuybackTag := numeric()]
-salesResults[, vendorBuybackPrice.GBP := numeric()]
-# Not Sold Tag
-salesResults[, notSoldTag := numeric()]
-salesResults[, notSoldPrice.GBP:= numeric()]
-# Post Sale Tag
-salesResults[, postSaleTag := numeric()]
-salesResults[, postSalePrice.GBP := numeric()]
+# What do I actually want to use as the final price? 
+# Probably the vendor buyback price ? 
 
-# GoffsUK 
+missingData <- salesResults[, lapply(.SD, function(x) sum(is.na(x))), by = .(Sale)]
 
-# Withdrawn 
-# Purchaser contains "withdrawn" 
-salesResults[Sale == "GoffsUK", withdrawnTag := 0]
-salesResults[Sale == "GoffsUK" &
-             is.na(Price.GBP) & 
-             str_detect(Purchaser, regex('Withdrawn', ignore_case = T)), 
-             withdrawnTag := 1]
+# Dont get name and country for goffs, this is fine
+# Need foaling years for goffs, this is just missed out for a large number of the sales..
 
-# Vendor Buyback 
-# Purchaser contains "vendor"
-salesResults[Sale == "GoffsUK", vendorBuybackTag := 0]
-salesResults[Sale == "GoffsUK" &
-             str_detect(Purchaser, regex('Vendor', ignore_case = T)), 
-             vendorBuybackTag := 1]
-salesResults[Sale == "GoffsUK" & 
-             vendorBuybackTag == 1, 
-             vendorBuybackPrice.GBP := as.numeric(str_extract(Purchaser, "\\d+"))]
-
-# Not Sold 
-# Purchaser contains "n.sold" | "Not Sold"
-salesResults[Sale == "GoffsUK", notSoldTag := 0]
-salesResults[Sale == "GoffsUK" &
-             (str_detect(Purchaser, regex('Not Sold', ignore_case = T)) |
-              str_detect(Purchaser, regex('N.Sold', ignore_case = T))), 
-             notSoldTag := 1]
-salesResults[Sale == "GoffsUK" &
-             notSoldTag == 1, 
-             notSoldPrice.GBP := as.numeric(str_extract(Purchaser, "\\d+"))]
-
-# Post Sale
-# Purchaser contains "(PS)"
-salesResults[Sale == "GoffsUK", postSaleTag := 0]
-salesResults[Sale == "GoffsUK" &
-             str_detect(Purchaser,  "\\(PS\\)"), 
-             postSaleTag := 1]
-salesResults[Sale == "GoffsUK" &
-             postSaleTag == 1,
-             postSalePrice.GBP := Price.GBP]
-
-# Check rows that aren't accounted for 
-salesResults[Sale == "GoffsUK" &
-             withdrawnTag == 0 &
-             is.na(vendorBuybackPrice.GBP) &
-             is.na(notSoldPrice.GBP) &
-             is.na(postSalePrice.GBP) &
-             is.na(Price.GBP)]
-
-# Only horses that are not sold and don't have a not sold price ...  
-# Eventually remove not sold no price and withdrawn horses
-
-# Some prices are in EUR
-unique(salesResults[!is.na(Price.EU)]$Sale)
-
-# Goffs: Original prices in Euros 
-salesResults[Sale == "Goffs",
-             Price.GBP := priceR::convert_currencies(price_start = Price.EU, 
-                                                     from = 'EUR', 
-                                                     to = 'GBP', 
-                                                     date = saleDate)]
-
-# Withdrawn 
-# Purchaser contains "withdrawn" 
-salesResults[Sale == "Goffs", withdrawnTag := 0]
-salesResults[Sale == "Goffs" &
-             is.na(Price.EU) & 
-             str_detect(Purchaser, regex('Withdrawn', ignore_case = T)), 
-             withdrawnTag := 1]
-
-# Vendor Buyback 
-# Purchaser contains "vendor"
-salesResults[Sale == "Goffs", vendorBuybackTag := 0]
-salesResults[Sale == "Goffs" &
-             str_detect(Purchaser, regex('Vendor', ignore_case = T)), 
-             vendorBuybackTag := 1]
-salesResults[Sale == "Goffs" & 
-             vendorBuybackTag == 1, 
-             vendorBuybackPrice.GBP := priceR::convert_currencies(price_start = as.numeric(str_extract(Purchaser, "\\d+")), 
-                                                                  from = 'EUR', 
-                                                                  to = 'GBP', 
-                                                                  date = saleDate)]
-
-# Not Sold 
-# Purchaser contains "n.sold" | "Not Sold"
-salesResults[Sale == "Goffs", notSoldTag := 0]
-salesResults[Sale == "Goffs" &
-             (str_detect(Purchaser, regex('Not Sold', ignore_case = T)) |
-             str_detect(Purchaser, regex('N.Sold', ignore_case = T))), 
-             notSoldTag := 1]
-salesResults[Sale == "Goffs" &
-             notSoldTag == 1, 
-             notSoldPrice.GBP := priceR::convert_currencies(price_start = as.numeric(str_extract(Purchaser, "\\d+")), 
-                                                            from = 'EUR', 
-                                                            to = 'GBP', 
-                                                            date = saleDate)]
-
-# Post Sale
-# Purchaser contains "(PS)"
-salesResults[Sale == "Goffs", postSaleTag := 0]
-salesResults[Sale == "Goffs" &
-             str_detect(Purchaser,  "\\(PS\\)"), 
-             postSaleTag := 1]
-salesResults[Sale == "Goffs" &
-             postSaleTag == 1,
-             postSalePrice.GBP := Price.GBP]
-
-# Check rows that aren't accounted for 
-salesResults[Sale == "Goffs" &
-               withdrawnTag == 0 &
-               is.na(vendorBuybackPrice.GBP) &
-               is.na(notSoldPrice.GBP) &
-               is.na(postSalePrice.GBP) &
-               is.na(Price.EU)]
-
-# Again not sold .. or no post sale price can all be dropped
-
-# Tattersalls UK  
-
-# Withdrawn 
-# Purchaser contains "Lot Withdrawn" 
-salesResults[Sale %in% c('TNew', 'TAsc'), withdrawnTag := 0]
-salesResults[Sale %in% c('TNew', 'TAsc') &
-             is.na(Price.GBP) & 
-             str_detect(Purchaser, regex('Lot Withdrawn', ignore_case = T)), 
-             withdrawnTag := 1]
-
-# Vendor Buyback 
-# Purchaser contains "vendor"
-salesResults[Sale %in% c('TNew', 'TAsc'), vendorBuybackTag := 0]
-salesResults[Sale %in% c('TNew', 'TAsc') &
-             str_detect(Purchaser, regex('Vendor', ignore_case = T)), 
-             vendorBuybackTag := 1]
-salesResults[Sale %in% c('TNew', 'TAsc') & 
-             vendorBuybackTag == 1, 
-             vendorBuybackPrice.GBP := Price.GBP]
-
-
-# Not Sold 
-# Purchaser contains "n.sold" | "Not Sold"
-salesResults[Sale %in% c('TNew', 'TAsc'), notSoldTag := 0]
-salesResults[Sale %in% c('TNew', 'TAsc') &
-             str_detect(Purchaser, regex('Lot Not Sold', ignore_case = T)), 
-             notSoldTag := 1]
-salesResults[Sale %in% c('TNew', 'TAsc') &
-             notSoldTag == 1, 
-             notSoldPrice.GBP := Price.GBP]
-
-# Post Sale
-# Purchaser contains "(PS)"
-salesResults[Sale %in% c('TNew', 'TAsc'), postSaleTag := 0]
-salesResults[Sale %in% c('TNew', 'TAsc') &
-             str_detect(Purchaser,  "\\(P.S.\\)"), 
-             postSaleTag := 1]
-salesResults[Sale %in% c('TNew', 'TAsc') &
-             postSaleTag == 1,
-             postSalePrice.GBP := Price.GBP]
-
-# Check for lacking prices
-salesResults[Sale %in% c('TNew', 'TAsc') &
-               withdrawnTag == 0 &
-               is.na(vendorBuybackPrice.GBP) &
-               is.na(notSoldPrice.GBP) &
-               is.na(postSalePrice.GBP) &
-               is.na(Price.GBP)]
-
-# All lots not sold 
-
-# Tattersalls IRE 
-salesResults[Sale == "TIre",
-             Price.GBP := priceR::convert_currencies(price_start = Price.EU, 
-                                                     from = 'EUR', 
-                                                     to = 'GBP', 
-                                                     date = saleDate)]
-
-# Withdrawn 
-# Purchaser contains "Lot Withdrawn" 
-salesResults[Sale == 'TIre', withdrawnTag := 0]
-salesResults[Sale == 'TIre' &
-             is.na(Price.EU) & 
-             str_detect(Purchaser, regex('Lot Withdrawn', ignore_case = T)), 
-             withdrawnTag := 1]
-
-# Vendor Buyback 
-# Purchaser contains "vendor"
-salesResults[Sale == 'TIre', vendorBuybackTag := 0]
-salesResults[Sale == 'TIre' &
-             str_detect(Purchaser, regex('Vendor', ignore_case = T)), 
-             vendorBuybackTag := 1]
-salesResults[Sale == 'TIre' & 
-             vendorBuybackTag == 1, 
-             vendorBuybackPrice.GBP := Price.GBP]
-
-
-# Not Sold 
-# Purchaser contains "n.sold" | "Not Sold"
-salesResults[Sale == 'TIre', notSoldTag := 0]
-salesResults[Sale == 'TIre' &
-               str_detect(Purchaser, regex('Lot Not Sold', ignore_case = T)), 
-             notSoldTag := 1]
-salesResults[Sale == 'TIre' &
-             notSoldTag == 1, 
-             notSoldPrice.GBP := Price.GBP]
-
-# Post Sale
-# Purchaser contains "(PS)"
-salesResults[Sale == 'TIre', postSaleTag := 0]
-salesResults[Sale == 'TIre' &
-             str_detect(Purchaser,  "\\(P.S.\\)"), 
-             postSaleTag := 1]
-salesResults[Sale == 'TIre' &
-             postSaleTag == 1,
-             postSalePrice.GBP := Price.GBP]
-
-# Check for lacking prices
-salesResults[Sale == 'TIre' &
-               withdrawnTag == 0 &
-               is.na(vendorBuybackPrice.GBP) &
-               is.na(notSoldPrice.GBP) &
-               is.na(postSalePrice.GBP) &
-               is.na(Price.GBP)]
-
-# All lots not sold 
-
-# Arqana
-
-arq <- salesResults[Sale == 'Arq']
-
-# Vendu = Sold
-# Racheté = Vendor Buyback 
-# Amiable ? 
-# Absent = Withdrawn Am I filtering these out? 
+unique(salesResults[is.na(foalingYear)]$FileName)
+# There are 7 goffs sales without the foaling year. These will have to be dropped
 
 
 
