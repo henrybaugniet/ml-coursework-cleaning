@@ -101,6 +101,8 @@ read_catalog <- function(fileName = 'Arq_BUP17.xlsx', filePath = '/Downloads'){
     #Stripmaking 
     myXLFile <- strip_maker(myXLFile)
     
+    myXLFile[, Acheteur := paste0(Acheteur, ' : ', Issue)]
+    
     #Get Strip for matching 
     freshDataTable <- myXLFile[, ..STRIP_VARS]
     freshDataTable <- as.data.table(freshDataTable)
@@ -249,7 +251,162 @@ read_catalog <- function(fileName = 'Arq_BUP17.xlsx', filePath = '/Downloads'){
     
   }
   
-  else if (str_detect(fileName, 'Goffs')){
+  else if (str_detect(fileName, 'Goffs') &
+           !str_detect(fileName, 'GoffsUK')){
+    
+    myXLFile <- readxl::read_excel(file.path(filePath, fileName))
+    myXLFile <- as.data.table(myXLFile)
+    
+    # Add country to goffs format
+    myXLFile$Country <- str_extract(myXLFile$Name, "(?<=\\().+?(?=\\))")
+    myXLFile$Name <- str_remove(myXLFile$Name, "(?=\\().*?(?<=\\))")
+    
+    # Add DAMSUFFIX to goffs format
+    myXLFile$DAMSUFFIX <- str_extract(myXLFile$Dam, "(?<=\\().+?(?=\\))")
+    myXLFile$Dam <- str_remove(myXLFile$Dam, "(?=\\().*?(?<=\\))")
+    
+    # Add SIRESUFFIX to goffs format
+    myXLFile$SIRESUFFIX <- str_extract(myXLFile$Sire, "(?<=\\().+?(?=\\))")
+    myXLFile$Sire <- str_remove(myXLFile$Sire, "(?=\\().*?(?<=\\))")
+    
+    #Stripmaking 
+    myXLFile <- strip_maker(myXLFile)
+    
+    #Get Strip for matching 
+    freshDataTable <- myXLFile[, ..STRIP_VARS]
+    freshDataTable <- as.data.table(freshDataTable)
+    
+    #Add in Sale Name
+    acronym <- str_extract(fileName, "[^_]+")
+    freshDataTable <- freshDataTable[, Sale := acronym]
+    freshDataTable <- freshDataTable[, FileName := fileName]
+    
+    # Match by STRIP then add NA in if isn't null
+    z <- match(freshDataTable$SIRESTRIP.DAMSTRIP.BIRTHYEAR, myXLFile$SIRESTRIP.DAMSTRIP.BIRTHYEAR)
+    
+    
+    # Lot 
+    if (!is.null(myXLFile$Lot)){
+      freshDataTable$Lot <- myXLFile$Lot[z]
+    }
+    else{
+      freshDataTable$Lot <- NA
+    }
+    
+    # Name
+    if (!is.null(myXLFile$Name)){
+      freshDataTable$Name <- myXLFile$Name[z]
+    }
+    else{
+      freshDataTable$Name <- NA
+    }
+    
+    # Country 
+    if (!is.null(myXLFile$Country)){
+      freshDataTable$Country <- myXLFile$Country[z]
+    }
+    else{
+      freshDataTable$Country <- NA
+    }
+    
+    # Year
+    if (!is.null(myXLFile$Year)){
+      freshDataTable$Year <- myXLFile$Year[z]
+    }
+    else{
+      freshDataTable$Year <- NA
+    }
+    
+    # Colour
+    if (!is.null(myXLFile$Colour)){
+      freshDataTable$Colour <- myXLFile$Colour[z]
+    }
+    else{
+      freshDataTable$Colour <- NA
+    }
+    
+    #Sire
+    if (!is.null(myXLFile$Sire)){
+      freshDataTable$Sire <- myXLFile$Sire[z]
+    }
+    else{
+      freshDataTable$Sire <- NA
+    }
+    
+    # Sire Suffix
+    if(!is.null(myXLFile$SIRESUFFIX)){
+      freshDataTable$SIRESUFFIX <- myXLFile$SIRESUFFIX
+    }
+    else{
+      freshDataTable$SIRESUFFIX <- NA
+    }
+    
+    # Dam
+    if (!is.null(myXLFile$Dam)){
+      freshDataTable$Dam <- myXLFile$Dam[z]
+    }
+    else{
+      freshDataTable$Dam <- NA
+    }
+    
+    # Dam Suffix
+    if(!is.null(myXLFile$DAMSUFFIX)){
+      freshDataTable$DAMSUFFIX <- myXLFile$DAMSUFFIX
+    }
+    else{
+      freshDataTable$DAMSUFFIX <- NA
+    }
+    
+    # Consignor
+    if (!is.null(myXLFile$Consignor)){
+      freshDataTable$Consignor <- myXLFile$Consignor[z]
+    }
+    else {
+      freshDataTable$Consignor <- NA
+    }
+    
+    # Stabling
+    if (!is.null(myXLFile$Stabling)){
+      freshDataTable$Stabling <- myXLFile$Stabling[z]
+    }
+    else{
+      freshDataTable$Stabling <- NA
+    }
+    
+    # Purchaser
+    if (!is.null(myXLFile$Purchaser)){
+      freshDataTable$Purchaser <- myXLFile$Purchaser[z]
+    }
+    else {
+      freshDataTable$Purchaser <- NA
+    }
+    
+    # Price.GBP
+    if (any(grepl('Price', names(myXLFile)))){
+      
+      priceIndex <- grep('Price', names(myXLFile))
+      colnames(myXLFile)[priceIndex] <- 'Price'
+      
+      freshDataTable$Price.EU <- myXLFile$Price[z]
+    }
+    else {
+      freshDataTable$Price.EU <- NA
+    }
+    
+    # Price.EU
+    freshDataTable$Price.GBP <- NA
+    
+    if (!is.null(myXLFile$Name)){
+      freshDataTable$HorseName <- myXLFile$Name[z]
+    }
+    else {
+      freshDataTable$HorseName <- NA
+    }
+    
+    
+  }
+  
+  else if (str_detect(fileName, 'GoffsUK')){
     
     myXLFile <- readxl::read_excel(file.path(filePath, fileName))
     myXLFile <- as.data.table(myXLFile)
@@ -404,7 +561,7 @@ read_catalog <- function(fileName = 'Arq_BUP17.xlsx', filePath = '/Downloads'){
   }
   
   else if(str_detect(fileName, 'TAsc')| str_detect(fileName, 'TNew')| 
-          str_detect(fileName, 'TChel')| str_detect(fileName, 'TIre')){
+          str_detect(fileName, 'TChel')){
     
     myXLFile <- readxl::read_excel(file.path(filePath, fileName))
     myXLFile <- as.data.table(myXLFile)
@@ -546,6 +703,159 @@ read_catalog <- function(fileName = 'Arq_BUP17.xlsx', filePath = '/Downloads'){
     
     # Price.EU
     freshDataTable$Price.EU <- NA
+    
+    if (!is.null(myXLFile$Name)){
+      freshDataTable$HorseName <- myXLFile$Name[z]
+    }
+    else {
+      freshDataTable$HorseName <- NA
+    }
+    
+    
+  }
+  
+  else if(str_detect(fileName, 'TIre')){
+    
+    myXLFile <- readxl::read_excel(file.path(filePath, fileName))
+    myXLFile <- as.data.table(myXLFile)
+    
+    # Add country to tatts format
+    myXLFile$Country <- str_extract(myXLFile$Name, "(?<=\\().+?(?=\\))")
+    myXLFile$Name <- str_remove(myXLFile$Name, "\\(.*")
+    
+    # Add DAMSUFFIX to tatts format
+    myXLFile$DAMSUFFIX <- str_extract(myXLFile$Dam, "(?<=\\().+?(?=\\))")
+    myXLFile$Dam <- str_remove(myXLFile$Dam, "(?=\\().*?(?<=\\))")
+    
+    # Add SIRESUFFIX to tatts format
+    myXLFile$SIRESUFFIX <- str_extract(myXLFile$Sire, "(?<=\\().+?(?=\\))")
+    myXLFile$Sire <- str_remove(myXLFile$Sire, "(?=\\().*?(?<=\\))")
+    
+    #Stripmaking 
+    myXLFile <- strip_maker(myXLFile)
+    
+    #Get Strip for matching 
+    freshDataTable <- myXLFile[, ..STRIP_VARS]
+    freshDataTable <- as.data.table(freshDataTable)
+    
+    #Add in Sale Name
+    acronym <- str_extract(fileName, "[^_]+")
+    freshDataTable <- freshDataTable[, Sale := acronym]
+    freshDataTable <- freshDataTable[, FileName := fileName]
+    
+    # Match by STRIP then add NA in if isn't null
+    z <- match(freshDataTable$SIRESTRIP.DAMSTRIP.BIRTHYEAR, myXLFile$SIRESTRIP.DAMSTRIP.BIRTHYEAR)
+    
+    # Lot 
+    if (!is.null(myXLFile$Lot)){
+      freshDataTable$Lot <- myXLFile$Lot[z]
+    }
+    else{
+      freshDataTable$Lot <- NA
+    }
+    
+    # Name
+    if (!is.null(myXLFile$Name)){
+      freshDataTable$Name <- myXLFile$Name[z]
+    }
+    else{
+      freshDataTable$Name <- NA
+    }
+    
+    # Country 
+    if (!is.null(myXLFile$Country)){
+      freshDataTable$Country <- myXLFile$Country[z]
+    }
+    else{
+      freshDataTable$Country <- NA
+    }
+    
+    # Year
+    if (!is.null(myXLFile$Year)){
+      freshDataTable$Year <- myXLFile$Year[z]
+    }
+    else{
+      freshDataTable$Year <- NA
+    }
+    
+    # Colour
+    if (!is.null(myXLFile$Colour)){
+      freshDataTable$Colour <- myXLFile$Colour[z]
+    }
+    else{
+      freshDataTable$Colour <- NA
+    }
+    
+    #Sire
+    if (!is.null(myXLFile$Sire)){
+      freshDataTable$Sire <- myXLFile$Sire[z]
+    }
+    else{
+      freshDataTable$Sire <- NA
+    }
+    
+    # Dam
+    if (!is.null(myXLFile$Dam)){
+      freshDataTable$Dam <- myXLFile$Dam[z]
+    }
+    else{
+      freshDataTable$Dam <- NA
+    }
+    
+    # Dam Suffix
+    if(!is.null(myXLFile$DAMSUFFIX)){
+      freshDataTable$DAMSUFFIX <- myXLFile$DAMSUFFIX
+    }
+    else{
+      freshDataTable$DAMSUFFIX <- NA
+    }
+    
+    # Sire Suffix
+    if(!is.null(myXLFile$SIRESUFFIX)){
+      freshDataTable$SIRESUFFIX <- myXLFile$SIRESUFFIX
+    }
+    else{
+      freshDataTable$SIRESUFFIX <- NA
+    }
+    
+    # Consignor
+    if (!is.null(myXLFile$Consignor)){
+      freshDataTable$Consignor <- myXLFile$Consignor[z]
+    }
+    else {
+      freshDataTable$Consignor <- NA
+    }
+    
+    # Stabling
+    if (!is.null(myXLFile$Stabling)){
+      freshDataTable$Stabling <- myXLFile$Stabling[z]
+    }
+    else{
+      freshDataTable$Stabling <- NA
+    }
+    
+    # Purchaser
+    if (!is.null(myXLFile$Purchaser)){
+      freshDataTable$Purchaser <- myXLFile$Purchaser[z]
+    }
+    else {
+      freshDataTable$Purchaser <- NA
+    }
+    
+    # Price.GBP
+    if (any(grepl('Price', names(myXLFile)))){
+      
+      priceIndex <- grep('Price', names(myXLFile))
+      colnames(myXLFile)[priceIndex] <- 'Price'
+      
+      freshDataTable$Price.EU <- myXLFile$Price[z]
+    }
+    else {
+      freshDataTable$Price.EU <- NA
+    }
+    
+    # Price.EU
+    freshDataTable$Price.GBP <- NA
     
     if (!is.null(myXLFile$Name)){
       freshDataTable$HorseName <- myXLFile$Name[z]
