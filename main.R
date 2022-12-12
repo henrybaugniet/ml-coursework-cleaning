@@ -9,9 +9,8 @@ library(priceR)
 source('./params.R')
 source('./name-wrangling.R')
 source('./price-wrangling.R')
-
-# Results Data UK
-load(RI_DAILY_PATH)
+source('./wrangle-consignor-names.R')
+source('./load-clean-outings.R')
 
 # Catalogs SS
 readxl::excel_sheets(file.path(SALE_CATALOGUES_PATH, "README.xlsx"))
@@ -85,7 +84,7 @@ salesResults[, foalingYear := as.numeric(foalingYear)]
 salesResults[foalingYear < 1000, foalingYear := foalingYear + 2000]
 
 # Get prices for all horses available in GBP
-salesResults <- wrangle_prices(salesResults)
+salesResults <- wrangle_prices(as.data.table(salesResults))
 
 # What do I actually want to use as the final price? 
 # Probably the vendor buyback price ? 
@@ -98,6 +97,32 @@ missingData <- salesResults[, lapply(.SD, function(x) sum(is.na(x))), by = .(Sal
 unique(salesResults[is.na(foalingYear)]$FileName)
 # There are 7 goffs sales without the foaling year. These will have to be dropped
 
+# 1) Choose pricing to use
+# 2) consignor wrangling
 
+# Parse all the consignor names
+salesResults$ParsedConsignor <- wrangle_consignor_names(salesResults$Consignor)
+
+# Summarise and generate additional variable
+consignorSummary <- as.data.table(table(salesResults$ParsedConsignor))
+z <- match(salesResults$ParsedConsignor, consignorSummary$V1)
+salesResults$totalNoConsigned <- consignorSummary$N[z]
+# Probably want to split these into buckets ?
+
+# Function that takes in the damstrip and suffix and uses this to create a summary of
+# the outings 
+outings <- load_clean_outings()
+
+# For each sale date calculate the sire and dam statistics 
+# in terms of progeny performance
+for (date in unique(salesResults$saleDate)) {
+  
+  todayResults <- salesResults[saleDate == date]
+  
+  # Should I be doing total number consigned as all consigned prior to date?
+  
+}
+
+todayResults <- salesResults[saleDate == unique(salesResults$saleDate)[1]]
 
 

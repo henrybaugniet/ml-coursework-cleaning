@@ -298,6 +298,10 @@ wrangle_prices <- function(df){
   
   df <- df[!(withdrawnTag == 1)]
   
+  df[, ChosenPrice.GBP := Price.GBP]
+  df[is.na(ChosenPrice.GBP), ChosenPrice.GBP := vendorBuybackPrice.GBP]
+  df[is.na(ChosenPrice.GBP), ChosenPrice.GBP := notSoldPrice.GBP]
+  
   return(df)
   
 }
