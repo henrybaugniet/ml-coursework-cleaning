@@ -4,6 +4,7 @@
 library(data.table)
 library(stringr)
 library(priceR)
+library(zeallot)
 
 # Source Files
 source('./params.R')
@@ -11,6 +12,7 @@ source('./name-wrangling.R')
 source('./price-wrangling.R')
 source('./wrangle-consignor-names.R')
 source('./load-clean-outings.R')
+source('./build-summary-stats.R')
 
 # Catalogs SS
 readxl::excel_sheets(file.path(SALE_CATALOGUES_PATH, "README.xlsx"))
@@ -109,20 +111,69 @@ z <- match(salesResults$ParsedConsignor, consignorSummary$V1)
 salesResults$totalNoConsigned <- consignorSummary$N[z]
 # Probably want to split these into buckets ?
 
+salesResults[, SIRESTRIP.SUFFIX := paste0(SIRESTRIP, '.', SIRESUFFIX)]
+salesResults[, DAMSTRIP.SUFFIX := paste0(DAMSTRIP, '.', DAMSUFFIX)]
+
+salesResults[, saleDate := as.Date(saleDate)]
+
 # Function that takes in the damstrip and suffix and uses this to create a summary of
 # the outings 
 outings <- load_clean_outings()
 
 # For each sale date calculate the sire and dam statistics 
 # in terms of progeny performance
-for (date in unique(salesResults$saleDate)) {
+
+totalSummary <- data.table()
+for (aDate in unique(salesResults$saleDate)) {
   
-  todayResults <- salesResults[saleDate == date]
-  
+  todaysResults <- salesResults[saleDate == aDate]
   # Should I be doing total number consigned as all consigned prior to date?
+  # Progeny summary by sire ...
+  
+  # Would be good to get some stats about the dam and sire themselves
+  # ESPECIALLY THE DAM
+  
+  sireSummary <- build_summary_stats(aDate, 
+                                     outings, 
+                                     SireStrip.Suffix = todaysResults$SIRESTRIP.SUFFIX)
+  
+  damSummary <- build_summary_stats(aDate, 
+                                    outings, 
+                                    DamStrip.Suffix = todaysResults$DAMSTRIP.SUFFIX)
+  
+  # Then bind back up all the results to salesResults 
+  todaysSummary <- merge(todaysResults, 
+                         sireSummary, 
+                         by.x = 'SIRESTRIP.SUFFIX', 
+                         by.y = 'SIRESTRIP.SUFFIX_SIRE', 
+                         all.x = TRUE)
+  
+  todaysSummary <- merge(todaysSummary, 
+                         damSummary, 
+                         by.x = 'DAMSTRIP.SUFFIX', 
+                         by.y = 'DAMSTRIP.SUFFIX_DAM', 
+                         all.x = TRUE)
+  
+  if (NROW(totalSummary) > 0) {
+    totalSummary <- rbindlist(list(totalSummary, todaysSummary))
+  } else {
+    totalSummary <- todaysSummary
+  }
   
 }
 
-todayResults <- salesResults[saleDate == unique(salesResults$saleDate)[1]]
+# Looks to be quite a few NAs - CHECK
+# Remove all infinities
+# Instead of -inf I want NA
+totalSummary[sapply(totalSummary, is.infinite)] <- NA_real_
+
+# There are quite a few Sires for which we do not have information
+# I am going to ignore these and not train my model on them as this is the approach 
+# which I would take in real life
+
+# Look at the percentage of dams / sires which we have the correct stats for
+totalSummary[, lapply(.SD, function(i) mean(i, na.rm = T)), .SDcols = is.numeric]
+colSums(is.na(totalSummary))
+
 
 

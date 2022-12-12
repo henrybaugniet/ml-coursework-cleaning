@@ -129,6 +129,10 @@ load_clean_outings <- function(){
   z                  <- which((outings$Pattern != "NOT") & (outings$place == 1))
   outings$PATplc[z] <- 1
   
+  # 2yo winning outing 
+  outings[, win2yo := 0]
+  outings[OAGE == 2 & win == 1, win2yo := 1]
+  
   # set early and late win marker, 0 if not a 2yo winner by end July, 1 if yes
   outings[, earlyWin := 0]
   outings[ OAGE == 2 & win == 1 & month(ODATE) <= EARLY_MONTH, earlyWin := 1]
@@ -136,8 +140,22 @@ load_clean_outings <- function(){
   outings[, lateWin := 0]
   outings[, outingRank := frank(ODATE, ties.method = 'dense'), by = .(OHORSEID)]
   outings[, winRank := 0]
-  outings[win == 1, winRank := frank(ODATE, ties.method = 'dense'), by = .(OHORSEID)]
+  outings[ win == 1, winRank := frank(ODATE, ties.method = 'dense'), by = .(OHORSEID)]
   outings[ OAGE > 2 & win == 1 & winRank == 1 & month(ODATE) > EARLY_MONTH, lateWin := 1]
+  
+  # Rank best trip per horse 
+  outings[, tripRank := frank(ORF, ties.method = 'dense'), by = OHORSEID]
+  
+  # add BT tag
+  outings[, BTyes := 0]
+  outings[ PATplc == 1 | ORF >= RATING_BT, BTyes := 1 ]
+  
+  #SIRE and DAMSTRIP
+  outings[, SIRESTRIP.SUFFIX := paste0(SireStrip, '.', SireSuffix)]
+  outings[, DAMSTRIP.SUFFIX := paste0(DamStrip, '.', DamSuffix)]
+  
+  # Make sure that using Date format for the date
+  outings[, ODATE := as.Date(ODATE)]
   
   return (outings)
   
