@@ -5,6 +5,7 @@ library(data.table)
 library(stringr)
 library(priceR)
 library(zeallot)
+library(corrplot)
 
 # Source Files
 source('./params.R')
@@ -126,16 +127,37 @@ for (aDate in unique(salesResults$saleDate)) {
 # Looks to be quite a few NAs - CHECK
 # Remove all infinities
 # Instead of -inf I want NA
-totalSummary[sapply(totalSummary, is.infinite)] <- NA_real_
-
-# Look at the percentage of dams / sires which we have the correct stats for
-totalSummary[, lapply(.SD, function(i) mean(i, na.rm = T)), .SDcols = is.numeric]
-colSums(is.na(totalSummary))
+totalSummary[sapply(totalSummary, is.infinite)] <- NA
+totalSummary[sapply(totalSummary, is.na)] <- NA
 
 # There are quite a few Sires for which we do not have information
 # I am going to ignore these and not train my model on them as this is the approach 
 # which I would take in real life
 
 # Speak to Jason about this 
+totalSummary_clean <- drop_empty_rows(totalSummary)
 
+# Look at the percentage of dams / sires which we have the correct stats for
+totalSummary_clean[, lapply(.SD, function(i) mean(i, na.rm = T)), .SDcols = is.numeric]
+colSums(is.na(totalSummary_clean))
+
+correlationTestCols <- c("ChosenPrice.GBP", "runnersRF_PROG_SIRE", "winnersRF_PROG_SIRE", 
+                        "wnrs2yo_PROG_SIRE", "earlyWnrs_PROG_SIRE", "lateWnrs_PROG_SIRE", 
+                        "win2yoPct_PROG_SIRE", "earlyWnrsPct_PROG_SIRE", "lateWnrsPct_PROG_SIRE", 
+                        "PATwnrs_PROG_SIRE", "PATplcd_PROG_SIRE", "BTcount_PROG_SIRE", "RPRmax_PROG_SIRE", 
+                        "RPRavg_PROG_SIRE", "RPRmin_PROG_SIRE", "tripAvg_PROG_SIRE", "runnersRF_PROG_DAM",           
+                        "winnersRF_PROG_DAM", "wnrs2yo_PROG_DAM", "earlyWnrs_PROG_DAM",          
+                        "lateWnrs_PROG_DAM", "win2yoPct_PROG_DAM", "earlyWnrsPct_PROG_DAM",      
+                        "lateWnrsPct_PROG_DAM", "PATwnrs_PROG_DAM", "PATplcd_PROG_DAM",            
+                        "BTcount_PROG_DAM", "RPRmax_PROG_DAM", "RPRavg_PROG_DAM",              
+                        "RPRmin_PROG_DAM", "tripAvg_PROG_DAM", "RPRmax_DAM",                   
+                        "OJCmax_DAM", "runs_DAM", "winner_DAM", "wnr2yo_DAM", 
+                        "earlyWnr_DAM", "lateWnr_DAM", "PATwnr_DAM", "PATplc_DAM",
+                        "BTyes_DAM")
+
+# Do some correlation tests on the columns
+res <- cor(na.omit(totalSummary_clean[, ..correlationTestCols]))
+
+corrplot(res, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
 

@@ -305,3 +305,26 @@ wrangle_prices <- function(df){
   return(df)
   
 }
+
+drop_empty_rows <- function(totalSummary) {
+  # Drop if we have no info on the sire 
+  sireCols <- colnames(totalSummary[, grep("_SIRE", names(totalSummary)), with = FALSE])
+  totalSummary_Complete <- na.omit(totalSummary, cols=sireCols)
+  
+  # Find rows which are lacking in PROG
+  progDamCols <- colnames(totalSummary[, grep("_PROG_DAM", names(totalSummary)), with = FALSE])
+  droppedProg <- na.omit(totalSummary, cols=progDamCols, invert = TRUE)
+  
+  # Find rows that are lacking in both 
+  damCols <- colnames(totalSummary[, grep("_DAM", names(totalSummary)), with = FALSE])
+  droppedDam <- droppedDam %!in% droppedProg
+  droppedDam <- na.omit(totalSummary, cols=sireCols, invert = TRUE)
+  
+  # Drop the intersection of these columns 
+  dropBoth <- intersect(droppedProg$SIRESTRIP.DAMSTRIP.BIRTHYEAR,droppedDam$SIRESTRIP.DAMSTRIP.BIRTHYEAR)
+  
+  totalSummary_Complete <- totalSummary_Complete[SIRESTRIP.DAMSTRIP.BIRTHYEAR %!in% dropBoth]
+  
+  return (totalSummary_Complete)
+}
+

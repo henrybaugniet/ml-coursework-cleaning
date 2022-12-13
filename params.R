@@ -1,5 +1,7 @@
 # Parameters
 
+'%!in%' <- function(x,y)!('%in%'(x,y))
+
 # File Paths
 RI_DAILY_PATH <- file.path(Sys.getenv("RRDIR"), "RI_daily", 'Data', 'allRISetUp.RData')
 SALE_CATALOGUES_PATH <- file.path(Sys.getenv("RRDIR"), "RawCataloguesRepo")
