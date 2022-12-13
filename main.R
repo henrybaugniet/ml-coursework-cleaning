@@ -14,48 +14,8 @@ source('./wrangle-consignor-names.R')
 source('./load-clean-outings.R')
 source('./build-summary-stats.R')
 
-# Catalogs SS
-readxl::excel_sheets(file.path(SALE_CATALOGUES_PATH, "README.xlsx"))
+catalogController <- build_catalog_controller()
 
-goffsUK <- readxl::read_excel(file.path(SALE_CATALOGUES_PATH, "README.xlsx"), 
-                   sheet = 'GoffsUK', 
-                   trim_ws = TRUE, 
-                   col_names = TRUE)
-
-goffs <- readxl::read_excel(file.path(SALE_CATALOGUES_PATH, "README.xlsx"), 
-                              sheet = 'Goffs', 
-                              trim_ws = TRUE, 
-                              col_names = TRUE)
-
-arqana <- readxl::read_excel(file.path(SALE_CATALOGUES_PATH, "README.xlsx"), 
-                              sheet = 'Arqana', 
-                              trim_ws = TRUE, 
-                              col_names = TRUE)
-
-tattersallsNewmarket <- readxl::read_excel(file.path(SALE_CATALOGUES_PATH, "README.xlsx"), 
-                              sheet = 'TattersallsNewmarket', 
-                              trim_ws = TRUE, 
-                              col_names = TRUE)
-
-tattersallsAscot <- readxl::read_excel(file.path(SALE_CATALOGUES_PATH, "README.xlsx"), 
-                              sheet = 'TattersallsAscot', 
-                              trim_ws = TRUE, 
-                              col_names = TRUE)
-
-tattersallsIreland <- readxl::read_excel(file.path(SALE_CATALOGUES_PATH, "README.xlsx"), 
-                              sheet = 'TattersallsIreland', 
-                              trim_ws = TRUE, 
-                              col_names = TRUE)
-
-catalogController <- as.data.table(rbindlist(list(goffsUK, 
-                                                  goffs, 
-                                                  arqana, 
-                                                  tattersallsNewmarket, 
-                                                  tattersallsAscot, 
-                                                  tattersallsIreland)))
-
-# Tag sales that contain yearlings in any column (to check I havent mislabeled any)
-catalogController[, flagYearling := rowSums(sapply(catalogController, grepl, pattern = 'Yearling', fixed = TRUE)) > 0]
 yearlingCatalogs <- catalogController[flagYearling == TRUE]
 
 # Choose to use only sales that sell exclusively yearlings 
@@ -145,14 +105,15 @@ for (aDate in unique(salesResults$saleDate)) {
   todaysSummary <- merge(todaysResults, 
                          sireSummary, 
                          by.x = 'SIRESTRIP.SUFFIX', 
-                         by.y = 'SIRESTRIP.SUFFIX_SIRE', 
+                         by.y = 'SIRESTRIP.SUFFIX_PROG_SIRE', 
                          all.x = TRUE)
   
   todaysSummary <- merge(todaysSummary, 
                          damSummary, 
                          by.x = 'DAMSTRIP.SUFFIX', 
-                         by.y = 'DAMSTRIP.SUFFIX_DAM', 
+                         by.y = 'DAMSTRIP.SUFFIX_PROG_DAM', 
                          all.x = TRUE)
+  
   
   if (NROW(totalSummary) > 0) {
     totalSummary <- rbindlist(list(totalSummary, todaysSummary))
@@ -167,13 +128,14 @@ for (aDate in unique(salesResults$saleDate)) {
 # Instead of -inf I want NA
 totalSummary[sapply(totalSummary, is.infinite)] <- NA_real_
 
-# There are quite a few Sires for which we do not have information
-# I am going to ignore these and not train my model on them as this is the approach 
-# which I would take in real life
-
 # Look at the percentage of dams / sires which we have the correct stats for
 totalSummary[, lapply(.SD, function(i) mean(i, na.rm = T)), .SDcols = is.numeric]
 colSums(is.na(totalSummary))
 
+# There are quite a few Sires for which we do not have information
+# I am going to ignore these and not train my model on them as this is the approach 
+# which I would take in real life
+
+# Speak to Jason about this 
 
 

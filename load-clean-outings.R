@@ -153,6 +153,7 @@ load_clean_outings <- function(){
   #SIRE and DAMSTRIP
   outings[, SIRESTRIP.SUFFIX := paste0(SireStrip, '.', SireSuffix)]
   outings[, DAMSTRIP.SUFFIX := paste0(DamStrip, '.', DamSuffix)]
+  outings[, HORSESTRIP.SUFFIX := paste0(HorseStrip, '.', HorseSuffix)]
   
   # Make sure that using Date format for the date
   outings[, ODATE := as.Date(ODATE)]

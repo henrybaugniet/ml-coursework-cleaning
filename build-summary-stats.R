@@ -9,6 +9,53 @@
 #
 ###################
 
+# Catalogs SS
+build_catalog_controller <- function() {
+  
+  readxl::excel_sheets(file.path(SALE_CATALOGUES_PATH, "README.xlsx"))
+  
+  goffsUK <- readxl::read_excel(file.path(SALE_CATALOGUES_PATH, "README.xlsx"), 
+                                sheet = 'GoffsUK', 
+                                trim_ws = TRUE, 
+                                col_names = TRUE)
+  
+  goffs <- readxl::read_excel(file.path(SALE_CATALOGUES_PATH, "README.xlsx"), 
+                              sheet = 'Goffs', 
+                              trim_ws = TRUE, 
+                              col_names = TRUE)
+  
+  arqana <- readxl::read_excel(file.path(SALE_CATALOGUES_PATH, "README.xlsx"), 
+                               sheet = 'Arqana', 
+                               trim_ws = TRUE, 
+                               col_names = TRUE)
+  
+  tattersallsNewmarket <- readxl::read_excel(file.path(SALE_CATALOGUES_PATH, "README.xlsx"), 
+                                             sheet = 'TattersallsNewmarket', 
+                                             trim_ws = TRUE, 
+                                             col_names = TRUE)
+  
+  tattersallsAscot <- readxl::read_excel(file.path(SALE_CATALOGUES_PATH, "README.xlsx"), 
+                                         sheet = 'TattersallsAscot', 
+                                         trim_ws = TRUE, 
+                                         col_names = TRUE)
+  
+  tattersallsIreland <- readxl::read_excel(file.path(SALE_CATALOGUES_PATH, "README.xlsx"), 
+                                           sheet = 'TattersallsIreland', 
+                                           trim_ws = TRUE, 
+                                           col_names = TRUE)
+  
+  catalogController <- as.data.table(rbindlist(list(goffsUK, 
+                                                    goffs, 
+                                                    arqana, 
+                                                    tattersallsNewmarket, 
+                                                    tattersallsAscot, 
+                                                    tattersallsIreland)))
+  
+  # Tag sales that contain yearlings in any column (to check I havent mislabeled any)
+  catalogController[, flagYearling := rowSums(sapply(catalogController, grepl, pattern = 'Yearling', fixed = TRUE)) > 0]
+  
+  return(catalogController)
+}
 
 
 build_summary_stats <- function(startDate, 
@@ -70,7 +117,7 @@ build_summary_stats <- function(startDate,
                                              tripAvg = round(mean(tripBest, na.rm=T),0))
                                       , by = list(SIRESTRIP.SUFFIX)]
     
-    colnames(parentSummary) <-  paste(colnames(parentSummary), "SIRE", sep = "_")
+    colnames(parentSummary) <-  paste(colnames(parentSummary), "PROG_SIRE", sep = "_")
     
   }
   
@@ -125,6 +172,36 @@ build_summary_stats <- function(startDate,
                                              RPRmin  = min(RPRmax, na.rm=T),
                                              tripAvg = round(mean(tripBest, na.rm=T),0))
                                       , by = list(DAMSTRIP.SUFFIX)]
+    
+    colnames(parentSummary) <-  paste(colnames(parentSummary), "PROG", sep = "_")
+    
+    # Also want some statistics on the dam at the track 
+    damOutings <- todaysOutings[HORSESTRIP.SUFFIX %in% DamStrip.Suffix]
+    
+    damSummary <- damOutings[, list(RPRmax = max(ORF, na.rm=T),
+                               OJCmax = max(OJC, na.rm=T),
+                               runs = sum(run, na.rm=T),
+                               winner = pmin(1, sum(win, na.rm=T)),
+                               wnr2yo = pmin(1, sum(win2yo, na.rm=T)),
+                               earlyWnr = pmin(1, sum(earlyWin, na.rm = T)),
+                               lateWnr  = pmin(1, sum(lateWin, na.rm = T)),
+                               PATwnr = pmin(1, sum(PATwin, na.rm=T)),
+                               PATplc = pmin(1, sum(PATplc, na.rm=T))), 
+                               by = .(HORSESTRIP.SUFFIX)]
+    
+    # Instead of -inf I want NA
+    damSummary[RPRmax < 0, RPRmax := NA_real_]
+    damSummary[OJCmax < 0, OJCmax := NA_real_]
+    
+    # add BT tag
+    damSummary[, BTyes := 0]
+    damSummary[ PATplc == 1 | RPRmax >= RATING_BT, BTyes := 1 ]
+    
+    parentSummary <- merge(parentSummary, 
+                      damSummary, 
+                      by.x = 'DAMSTRIP.SUFFIX_PROG', 
+                      by.y = 'HORSESTRIP.SUFFIX', 
+                      all.x = TRUE)
     
     colnames(parentSummary) <-  paste(colnames(parentSummary), "DAM", sep = "_")
     
