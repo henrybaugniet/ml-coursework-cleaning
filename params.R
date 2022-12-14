@@ -5,6 +5,8 @@
 # File Paths
 RI_DAILY_PATH <- file.path(Sys.getenv("RRDIR"), "RI_daily", 'Data', 'allRISetUp.RData')
 SALE_CATALOGUES_PATH <- file.path(Sys.getenv("RRDIR"), "RawCataloguesRepo")
+SIRE_DATA_PATH <- file.path(Sys.getenv('RRDIR'), "CoverFeesYlgSalesFSS/data/SireCoveringFees.RData")
+FOAL_DATA_PATH <- file.path(Sys.getenv('RRDIR'), "CoverFeesYlgSalesFSS/data/SireYlgFoalPrices.RData")
 
 STRIP_VARS <- c('SIRESTRIP', 'DAMSTRIP', 'SIRESTRIP.DAMSTRIP.BIRTHYEAR')
 

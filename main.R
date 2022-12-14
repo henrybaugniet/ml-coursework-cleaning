@@ -6,6 +6,7 @@ library(stringr)
 library(priceR)
 library(zeallot)
 library(corrplot)
+library(ggplot2)
 
 # Source Files
 source('./params.R')
@@ -79,7 +80,9 @@ salesResults[, saleDate := as.Date(saleDate)]
 
 # Function that takes in the damstrip and suffix and uses this to create a summary of
 # the outings 
-outings <- load_clean_outings()
+cleanOutings <- load_clean_outings()
+cleanSires <- load_clean_sires()
+cleanFoals <- load_clean_foals()
 
 # For each sale date calculate the sire and dam statistics 
 # in terms of progeny performance
@@ -88,18 +91,15 @@ totalSummary <- data.table()
 for (aDate in unique(salesResults$saleDate)) {
   
   todaysResults <- salesResults[saleDate == aDate]
-  # Should I be doing total number consigned as all consigned prior to date?
-  # Progeny summary by sire ...
-  
-  # Would be good to get some stats about the dam and sire themselves
-  # ESPECIALLY THE DAM
   
   sireSummary <- build_summary_stats(aDate, 
-                                     outings, 
+                                     cleanOutings, 
+                                     allSires = cleanSires,
+                                     allFoals = cleanFoals,
                                      SireStrip.Suffix = todaysResults$SIRESTRIP.SUFFIX)
   
   damSummary <- build_summary_stats(aDate, 
-                                    outings, 
+                                    cleanOutings, 
                                     DamStrip.Suffix = todaysResults$DAMSTRIP.SUFFIX)
   
   # Then bind back up all the results to salesResults 
@@ -141,11 +141,15 @@ totalSummary_clean <- drop_empty_rows(totalSummary)
 totalSummary_clean[, lapply(.SD, function(i) mean(i, na.rm = T)), .SDcols = is.numeric]
 colSums(is.na(totalSummary_clean))
 
+colnames(totalSummary_clean)
+
 correlationTestCols <- c("ChosenPrice.GBP", "runnersRF_PROG_SIRE", "winnersRF_PROG_SIRE", 
                         "wnrs2yo_PROG_SIRE", "earlyWnrs_PROG_SIRE", "lateWnrs_PROG_SIRE", 
                         "win2yoPct_PROG_SIRE", "earlyWnrsPct_PROG_SIRE", "lateWnrsPct_PROG_SIRE", 
                         "PATwnrs_PROG_SIRE", "PATplcd_PROG_SIRE", "BTcount_PROG_SIRE", "RPRmax_PROG_SIRE", 
-                        "RPRavg_PROG_SIRE", "RPRmin_PROG_SIRE", "tripAvg_PROG_SIRE", "runnersRF_PROG_DAM",           
+                        "RPRavg_PROG_SIRE", "RPRmin_PROG_SIRE", "tripAvg_PROG_SIRE", "foalMedianPrice_PROG_SIRE", 
+                        "foalSaleCount_PROG_SIRE", "foalSoldPct_PROG_SIRE", "coverYear_SIRE",             
+                        "coverFee.GBP_SIRE", "age_SIRE", "coverNum_SIRE", "runnersRF_PROG_DAM",           
                         "winnersRF_PROG_DAM", "wnrs2yo_PROG_DAM", "earlyWnrs_PROG_DAM",          
                         "lateWnrs_PROG_DAM", "win2yoPct_PROG_DAM", "earlyWnrsPct_PROG_DAM",      
                         "lateWnrsPct_PROG_DAM", "PATwnrs_PROG_DAM", "PATplcd_PROG_DAM",            
@@ -157,7 +161,110 @@ correlationTestCols <- c("ChosenPrice.GBP", "runnersRF_PROG_SIRE", "winnersRF_PR
 
 # Do some correlation tests on the columns
 res <- cor(na.omit(totalSummary_clean[, ..correlationTestCols]))
+priceCor <- as.data.table(res)[1]
+corrplot(res, type = "upper", order = "original", 
+         tl.col = "black", tl.srt = 45, cl.cex =0.1)
 
-corrplot(res, type = "upper", order = "hclust", 
-         tl.col = "black", tl.srt = 45)
+# From this it is clear that there are a number of variables with next to no correlation
+# These are the ones that we are likely going to drop from the model 
+
+# Use the log of prices
+
+# saveRDS(totalSummary_clean, './data/totalSummary_clean.RDS')
+
+# Deriving a consignor score 
+consignorScore <- totalSummary_clean[, c('SIRESTRIP.DAMSTRIP.BIRTHYEAR', 'ChosenPrice.GBP', 'ParsedConsignor', 'saleDate')]
+consignorScore[, saleYear := year(saleDate)]
+# I have six years of sales but 2020 foals are the latest that will have made it to the track 
+# going to use the first 2.5 and second 2.5 to derive coefficients 
+# This means we can use 2021 yearlings
+unique(consignorScore$saleYear)
+
+# Need to get the median rating that all horses achieved on the track 
+progenySummary <- cleanOutings[, list(RPRmax = max(ORF, na.rm=T),
+                                        OJCmax = max(OJC, na.rm=T),
+                                        runs = sum(run, na.rm=T),
+                                        winner = pmin(1, sum(win, na.rm=T)),
+                                        wnr2yo = pmin(1, sum(win2yo, na.rm=T)),
+                                        earlyWnr = pmin(1, sum(earlyWin, na.rm = T)),
+                                        lateWnr  = pmin(1, sum(lateWin, na.rm = T))), 
+                                 by = .(SIRESTRIP.DAMSTRIP.BIRTHYEAR)]
+
+# Instead of -inf I want NA
+progenySummary[RPRmax < 0, RPRmax := NA]
+progenySummary[OJCmax < 0, OJCmax := NA]
+
+z <- match(consignorScore$SIRESTRIP.DAMSTRIP.BIRTHYEAR, progenySummary$SIRESTRIP.DAMSTRIP.BIRTHYEAR)
+consignorScore$RPRmax <- progenySummary$RPRmax[z]
+consignorScore[, horseNumber := 1]
+
+# Can only use rows which we have these values for
+consignorScore <- na.omit(consignorScore, cols = c('RPRmax', 'ChosenPrice.GBP'))
+unique(consignorScore[, saleYear])
+
+# Split into buckets
+consignorScore <- consignorScore[order(saleDate)]
+consignorScore[, ID := .I]
+consignorScore[ID < NROW(consignorScore)/2, dateBucket := 1]
+consignorScore[ID >= NROW(consignorScore)/2, dateBucket := 2]
+
+# Carry out a linear regression for both buckets 
+consignorScore_1 <- consignorScore[dateBucket == 1]
+consignorScore_2 <- consignorScore[dateBucket == 2]
+
+# Regression Function 
+
+
+# Summarise by consignor 
+consignorSummary_1 <- consignorScore_1[, list(meanRPRmax = round(mean(RPRmax, na.rm=T), 2),
+                                          medianRPRmax = round(median(RPRmax, na.rm=T), 2), 
+                                          meanSalePrice = round(mean(ChosenPrice.GBP, na.rm=T), 2), 
+                                          medianSalePrice = round(median(ChosenPrice.GBP, na.rm = T), 2), 
+                                          totalSold = sum(horseNumber)), 
+                                   by = .(ParsedConsignor)]
+
+consignorSummary_2 <- consignorScore_2[, list(meanRPRmax = round(mean(RPRmax, na.rm=T), 2),
+                                              medianRPRmax = round(median(RPRmax, na.rm=T), 2), 
+                                              meanSalePrice = round(mean(ChosenPrice.GBP, na.rm=T), 2), 
+                                              medianSalePrice = round(median(ChosenPrice.GBP, na.rm = T), 2), 
+                                              totalSold = sum(horseNumber)), 
+                                       by = .(ParsedConsignor)]
+
+consignorSummary_1[sapply(consignorSummary_1, is.infinite)] <- NA
+consignorSummary_1[sapply(consignorSummary_1, is.na)] <- NA
+consignorSummary_2[sapply(consignorSummary_2, is.infinite)] <- NA
+consignorSummary_2[sapply(consignorSummary_2, is.na)] <- NA
+
+# Regression between log(price) and medianRPRmax
+
+# this is predicted line comparing only chosen variables
+plot_1 <- ggplot(data = consignorSummary_1[totalSold > 5], aes(x = log(medianSalePrice), y = medianRPRmax)) + 
+                 geom_point(color='black') +
+                 geom_smooth(method = "lm", se = FALSE)
+
+plot_1         
+
+res_1 <- lm((log(consignorSummary_1[totalSold > 5]$medianSalePrice) ~ consignorSummary_1[totalSold > 5]$medianRPRmax))
+
+
+plot_2 <- ggplot(data = consignorSummary_2[totalSold > 5], aes(x = log(medianSalePrice), y = medianRPRmax)) + 
+                 geom_point(color='black') +
+                 geom_smooth(method = "lm", se = FALSE)
+
+plot_2
+
+res_2 <- lm((log(consignorSummary_2[totalSold > 5]$medianSalePrice) ~ consignorSummary_2[totalSold > 5]$medianRPRmax))
+
+print(paste0('Intercept 1: ', round(res_1[["coefficients"]][["(Intercept)"]], 4)))
+print(paste0('Intercept 2: ', round(res_2[["coefficients"]][["(Intercept)"]], 4)))
+print(paste0('Coefficient 1: ', round(res_1[["coefficients"]][["consignorSummary_1[totalSold > 5]$medianRPRmax"]], 4)))
+print(paste0('Coefficient 2: ', round(res_2[["coefficients"]][["consignorSummary_2[totalSold > 5]$medianRPRmax"]], 4)))
+
+# The idea being if a consignor is consistently selling 
+# horses better than expected then they are are considered a good consignor
+
+
+
+
+
 

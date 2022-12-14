@@ -9,6 +9,86 @@
 #
 ###################
 
+# Catalogs SS
+build_catalog_controller <- function() {
+  
+  readxl::excel_sheets(file.path(SALE_CATALOGUES_PATH, "README.xlsx"))
+  
+  goffsUK <- readxl::read_excel(file.path(SALE_CATALOGUES_PATH, "README.xlsx"), 
+                                sheet = 'GoffsUK', 
+                                trim_ws = TRUE, 
+                                col_names = TRUE)
+  
+  goffs <- readxl::read_excel(file.path(SALE_CATALOGUES_PATH, "README.xlsx"), 
+                              sheet = 'Goffs', 
+                              trim_ws = TRUE, 
+                              col_names = TRUE)
+  
+  arqana <- readxl::read_excel(file.path(SALE_CATALOGUES_PATH, "README.xlsx"), 
+                               sheet = 'Arqana', 
+                               trim_ws = TRUE, 
+                               col_names = TRUE)
+  
+  tattersallsNewmarket <- readxl::read_excel(file.path(SALE_CATALOGUES_PATH, "README.xlsx"), 
+                                             sheet = 'TattersallsNewmarket', 
+                                             trim_ws = TRUE, 
+                                             col_names = TRUE)
+  
+  tattersallsAscot <- readxl::read_excel(file.path(SALE_CATALOGUES_PATH, "README.xlsx"), 
+                                         sheet = 'TattersallsAscot', 
+                                         trim_ws = TRUE, 
+                                         col_names = TRUE)
+  
+  tattersallsIreland <- readxl::read_excel(file.path(SALE_CATALOGUES_PATH, "README.xlsx"), 
+                                           sheet = 'TattersallsIreland', 
+                                           trim_ws = TRUE, 
+                                           col_names = TRUE)
+  
+  catalogController <- as.data.table(rbindlist(list(goffsUK, 
+                                                    goffs, 
+                                                    arqana, 
+                                                    tattersallsNewmarket, 
+                                                    tattersallsAscot, 
+                                                    tattersallsIreland)))
+  
+  # Tag sales that contain yearlings in any column (to check I havent mislabeled any)
+  catalogController[, flagYearling := rowSums(sapply(catalogController, grepl, pattern = 'Yearling', fixed = TRUE)) > 0]
+  
+  return(catalogController)
+}
+
+load_clean_sires <- function(){
+  
+  load(SIRE_DATA_PATH)
+  
+  allsires[, SIRESTRIP.SUFFIX := paste0(sStrip, '.', sSuffix)]
+  
+  # Filter out Danish 
+  allsires <- na.omit(allsires, cols = c('cur', 'coverFee', 'coverYear'))
+  allsires <- allsires[cur %in% c('USD', 'EUR', 'GBP', 'JPY', 'AUD')]
+  allsires <- allsires[as.numeric(coverYear) > 2010 & as.numeric(coverYear) < 2023]
+  allsires[, coverFee := as.numeric(coverFee)]
+  allsires[, cur := as.character(cur)]
+  
+  # Using the start of July as date 
+  allsires[, Price.GBP := priceR::convert_currencies(price_start = coverFee, 
+                                                     from = cur, 
+                                                     to = 'GBP', 
+                                                     date = as.Date(paste0(coverYear, '-07-01')))]
+  
+  return(allsires)
+}
+
+load_clean_foals <- function() {
+  
+  load(FOAL_DATA_PATH)
+  
+  foalPrices[, SIRESTRIP.SUFFIX := paste0(sStrip, '.', sSuffix)]
+  
+  return(foalPrices)
+  
+}
+
 # Now that we have sales data we want to get dam, sire and progeny stats
 load_clean_outings <- function(){
   
@@ -157,6 +237,7 @@ load_clean_outings <- function(){
   
   # Make sure that using Date format for the date
   outings[, ODATE := as.Date(ODATE)]
+  outings[, SIRESTRIP.DAMSTRIP.BIRTHYEAR := paste0(SireStrip, '.', DamStrip, '.', year(HorseFoalingDate))]
   
   return (outings)
   
