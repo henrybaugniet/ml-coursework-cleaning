@@ -308,24 +308,35 @@ wrangle_prices <- function(df){
 
 drop_empty_rows <- function(totalSummary) {
   
-  # Drop if we have no info on the sire 
+  # Find rows with no info on sire 
   sireCols <- colnames(totalSummary[, grep("_SIRE", names(totalSummary)), with = FALSE])
-  totalSummary_Complete <- na.omit(totalSummary, cols=sireCols)
+  sireCols <- append(sireCols, 'SIRESTRIP.DAMSTRIP.BIRTHYEAR')
+  x <- totalSummary[, ..sireCols][, nonNAcount := sum(!is.na(.SD)), by = 1:nrow(totalSummary[, ..sireCols])]
+  z <- match(x$SIRESTRIP.DAMSTRIP.BIRTHYEAR, totalSummary$SIRESTRIP.DAMSTRIP.BIRTHYEAR)
+  totalSummary$sireValCount <- x$nonNAcount[z] - 1
   
-  # Find rows which are lacking in PROG
+  # Find rows with no info on the prog dam 
   progDamCols <- colnames(totalSummary[, grep("_PROG_DAM", names(totalSummary)), with = FALSE])
-  droppedProg <- na.omit(totalSummary, cols=progDamCols, invert = TRUE)
+  progDamCols <- append(progDamCols, 'SIRESTRIP.DAMSTRIP.BIRTHYEAR')
+  x <- totalSummary[, ..progDamCols][, nonNAcount := sum(!is.na(.SD)), by = 1:nrow(totalSummary[, ..progDamCols])]
+  z <- match(x$SIRESTRIP.DAMSTRIP.BIRTHYEAR, totalSummary$SIRESTRIP.DAMSTRIP.BIRTHYEAR)
+  totalSummary$damProjValCount <- x$nonNAcount[z] - 1
   
-  # Find rows that are lacking in both 
+  # Find rows with no info on the dam 
   damCols <- colnames(totalSummary[, grep("_DAM", names(totalSummary)), with = FALSE])
-  droppedDam <- damCols[damCols %!in% progDamCols]
-  droppedDam <- na.omit(totalSummary, cols=droppedDam, invert = TRUE)
+  damCols <- damCols[damCols %!in% progDamCols]
+  damCols <- append(damCols, 'SIRESTRIP.DAMSTRIP.BIRTHYEAR')
+  x <- totalSummary[, ..damCols][, nonNAcount := sum(!is.na(.SD)), by = 1:nrow(totalSummary[, ..damCols])]
+  z <- match(x$SIRESTRIP.DAMSTRIP.BIRTHYEAR, totalSummary$SIRESTRIP.DAMSTRIP.BIRTHYEAR)
+  totalSummary$damValCount <- x$nonNAcount[z] - 1
+
+  # Return only rows where we have some info on the dam and sire 
+  totalSummaryClean <- totalSummary[(damValCount + damProjValCount) >= 1]
+  totalSummaryClean <- totalSummaryClean[sireValCount >= 1]
   
-  # Drop the intersection of these columns 
-  dropBoth <- intersect(droppedProg$SIRESTRIP.DAMSTRIP.BIRTHYEAR, droppedDam$SIRESTRIP.DAMSTRIP.BIRTHYEAR)
+  # Drop rows where we dont have the cover number for sires 
+  totalSummaryClean <- na.omit(totalSummaryClean, cols = c('coverNum_SIRE'))
   
-  totalSummary_Complete <- totalSummary_Complete[SIRESTRIP.DAMSTRIP.BIRTHYEAR %!in% dropBoth]
-  
-  return (totalSummary_Complete)
+  return (totalSummaryClean)
 }
 

@@ -70,11 +70,24 @@ load_clean_sires <- function(){
   allsires[, coverFee := as.numeric(coverFee)]
   allsires[, cur := as.character(cur)]
   
-  # Using the start of July as date 
+  # Using the start of July as date for conversion 
   allsires[, Price.GBP := priceR::convert_currencies(price_start = coverFee, 
                                                      from = cur, 
                                                      to = 'GBP', 
                                                      date = as.Date(paste0(coverYear, '-07-01')))]
+  
+  # Get the lag price in GBP 
+  allsires[!is.na(coverFee.lag) & 
+           !is.na(cur.lag) & 
+           cur.lag %in% c('USD', 'EUR', 'GBP', 'JPY', 'AUD'), 
+           Price.GBP_lag1 := priceR::convert_currencies(price_start = coverFee.lag, 
+                                                        from = cur.lag, 
+                                                        to = 'GBP', 
+                                                        date = as.Date(paste0(coverYear, '-07-01')))]
+  
+  # I am not changing exchange rate because I it is important the diff stays as zero 
+  # if the price doesnt change.
+  allsires[, coverFeeDiff_lag.GBP := Price.GBP - Price.GBP_lag1]
   
   return(allsires)
 }

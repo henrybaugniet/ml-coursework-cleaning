@@ -15,6 +15,7 @@ source('./price-wrangling.R')
 source('./wrangle-consignor-names.R')
 source('./load-clean-outings.R')
 source('./build-summary-stats.R')
+source('./generate-consignor-scores.R')
 
 catalogController <- build_catalog_controller()
 
@@ -78,6 +79,10 @@ salesResults[, DAMSTRIP.SUFFIX := paste0(DAMSTRIP, '.', DAMSUFFIX)]
 
 salesResults[, saleDate := as.Date(saleDate)]
 
+salesResults[, premiumSale := 0]
+salesResults[saleName %in% PREMIUM_SALES, premiumSale := 1]
+salesResults[, saleYear := year(saleDate)]
+
 # Function that takes in the damstrip and suffix and uses this to create a summary of
 # the outings 
 cleanOutings <- load_clean_outings()
@@ -91,6 +96,9 @@ totalSummary <- data.table()
 for (aDate in unique(salesResults$saleDate)) {
   
   todaysResults <- salesResults[saleDate == aDate]
+  
+  print('Running aggregation for:')
+  print(unique(todaysResults$FileName))
   
   sireSummary <- build_summary_stats(aDate, 
                                      cleanOutings, 
@@ -115,14 +123,30 @@ for (aDate in unique(salesResults$saleDate)) {
                          by.y = 'DAMSTRIP.SUFFIX_PROG_DAM', 
                          all.x = TRUE)
   
+  # Also run a sire function here
+  
+  # Match across some sire statistics 
+  # Sire stats have to be lagged by 2 
+  # 2 years between a cover and yearling being sold 
+  sireYear <- year(as.Date(aDate, origin = '1970-01-01')) - 2
+  sireInfo <- cleanSires[coverYear == sireYear]
+  
+  z <- match(todaysSummary$SIRESTRIP.SUFFIX, sireInfo$SIRESTRIP.SUFFIX)
+  todaysSummary$coverYear_SIRE <- sireInfo$coverYear[z]
+  todaysSummary$coverFee.GBP_SIRE <- sireInfo$Price.GBP[z]
+  todaysSummary$age_SIRE <- sireInfo$age[z]
+  todaysSummary$coverNum_SIRE <- sireInfo$coverNum[z]
+  todaysSummary$priceDiff.GBP_lag1_SIRE <- sireInfo$coverFeeDiff_lag.GBP[z]
   
   if (NROW(totalSummary) > 0) {
     totalSummary <- rbindlist(list(totalSummary, todaysSummary))
   } else {
     totalSummary <- todaysSummary
   }
-  
 }
+
+# convert runners and winners to a percentage for sire 
+totalSummary[, winPctRF := round(100*winnersRF_PROG_SIRE/runnersRF_PROG_SIRE, 1)]
 
 # Looks to be quite a few NAs - CHECK
 # Remove all infinities
@@ -162,6 +186,8 @@ correlationTestCols <- c("ChosenPrice.GBP", "runnersRF_PROG_SIRE", "winnersRF_PR
                         "earlyWnr_DAM", "lateWnr_DAM", "PATwnr_DAM", "PATplc_DAM",
                         "BTyes_DAM", "consignorScore")
 
+# Have a look at the correlation for some of my new columns
+
 # Do some correlation tests on the columns
 res <- cor(na.omit(totalSummary_clean[, ..correlationTestCols]))
 priceCor <- as.data.table(res)[1]
@@ -173,7 +199,7 @@ corrplot(res, type = "upper", order = "original",
 
 # Use the log of prices
 
-# saveRDS(totalSummary_clean, './data/totalSummary_clean.RDS')
+saveRDS(totalSummary_clean, './data/totalSummary_clean.RDS')
 
 # Export tidy variables for matlab algo's 
 # Do I need to use logs of prices for naive bayes and random forest?
@@ -183,10 +209,59 @@ colnames(priceCorT) <- c('Variable', 'Coefficient')
 priceCorTSig <- priceCorT[Coefficient > 0.2]
 useVars <- priceCorTSig$Variable
 
-write.csv(totalSummary_clean[, ..useVars], './data/ml-vars.csv', row.names = FALSE)
+useVars <- append(useVars, c('premiumSale', 'consignorScore', 
+                             'BTpct_PROG_DAM', 'BTpct_PROG_SIRE', 
+                             'priceDiff.GBP_lag1_SIRE', 'RPR100pct_PROG_DAM', 
+                             'RPR100pct_PROG_SIRE', 'winPctRF'))
 
-# At the moment I have foal median price I want the foal itselfs price if avi 
-# I also have not tested the categoric variables such as sale, will need year and horse breeding also 
+# replot with useVars
+res <- cor(na.omit(totalSummary_clean[, ..useVars]))
+priceCor <- as.data.table(res)[1]
+corrplot(res, type = "upper", order = "original", 
+         tl.col = "black", tl.srt = 45, cl.cex =0.1)
+
+# Add unique identifier and saleDate then save
+useVars <- append(c('SIRESTRIP.DAMSTRIP.BIRTHYEAR', 'saleDate', 'coverNum_SIRE'), useVars)
+
+# Drop the non useful ones 
+dropVars <- c('consignorScore', 'BTcount_PROG_DAM', 'BTcount_PROG_SIRE', 
+              'PATwnrs_PROG_SIRE', 'PATwnrs_PROG_DAM', 
+              'winnersRF_PROG_SIRE', 'BTpct_PROG_DAM')
+
+useVars <- useVars[useVars %!in% dropVars]
+
+continous_data_final <- totalSummary_clean[, ..useVars]
+
+write.csv(continous_data_final, './data/ml-vars.csv', row.names = FALSE)
+
+colnames(continous_data_final)
+
+# 1) chosenPrice.GBP put into buckets
+# 2) 
+
+# Have seen that the square root of the number of observations is a safe bet?
+BINS <- sqrt(NROW(continous_data_final))
+
+PRICE_BUCKETS <- BINS
+DEFAULT_BUCKETS <- BINS
+
+# Price Bins 
+continous_data_final[order(ChosenPrice.GBP), price_BIN:= ceiling(.I/.N*PRICE_BUCKETS)]
+
+# Date Bins
+continous_data_final[, year_BIN := year(saleDate)]
+
+# Runners Bins and deal with NAs 
+continous_data_final[is.na(runnersRF_PROG_SIRE), runnersRF_PROG_SIRE := 0]
+continous_data_final[order(runnersRF_PROG_SIRE), runners_RF_SIRE_BIN := ceiling(.I/.N*DEFAULT_BUCKETS)]
+
+# Late winners bins and deal with NAs
+continous_data_final[is.na(lateWnrs_PROG_SIRE), lateWnrs_PROG_SIRE := 0]
+continous_data_final[order(lateWnrs_PROG_SIRE), lateWnrs_SIRE_BIN := ceiling(.I/.N*DEFAULT_BUCKETS)]
+
+# Pattern Placed Sires
+
+
 
 
 

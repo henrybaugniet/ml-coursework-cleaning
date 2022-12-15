@@ -28,7 +28,7 @@ build_summary_stats <- function(startDate,
     progenyOutings[, bestTripRank := min(tripRank, ties.method = 'dense'), by = OHORSEID]
     progenyOutings[bestTripRank == tripRank, tripBest := 1]
     
-    # Sumarry stats for the progeny 
+    # Summary stats for the progeny 
     # There are some outing level stats that have to be done each time
     progenySummary <- progenyOutings[, list(RPRmax = max(ORF, na.rm=T),
                                             OJCmax = max(OJC, na.rm=T),
@@ -49,6 +49,10 @@ build_summary_stats <- function(startDate,
     progenySummary[, BTyes := 0]
     progenySummary[ PATplc == 1 | RPRmax >= RATING_BT, BTyes := 1 ]
     
+    # add RPR100 tag
+    progenySummary[, RPR100 := 0]
+    progenySummary[RPRmax >= 100, RPR100 := 1]
+    
     # Best Trip by horse
     z <- match(progenySummary$OHORSEID, progenyOutings[tripBest == 1]$OHORSEID)
     progenySummary$tripBest <- progenyOutings$Distance[z]
@@ -68,10 +72,15 @@ build_summary_stats <- function(startDate,
                                              RPRmax  = max(RPRmax, na.rm=T),
                                              RPRavg  = round(mean(RPRmax, na.rm=T),0),
                                              RPRmin  = min(RPRmax, na.rm=T),
-                                             tripAvg = round(mean(tripBest, na.rm=T),0))
+                                             tripAvg = round(mean(tripBest, na.rm=T),0), 
+                                             RPR100count = sum(RPR100, na.rm=T))
                                       , by = list(SIRESTRIP.SUFFIX)]
     
-    # Foal year also lagged by one
+    # Percentage of black type winners
+    parentSummary[, BTpct := round(100*BTcount/runnersRF, 1)]
+    parentSummary[, RPR100pct := round(100*BTcount/runnersRF, 1)]
+    
+    # Foal year lagged by one
     foalYear <- year(as.Date(startDate, origin = '1970-01-01')) - 1
     foalInfo <- allFoals[saleYear == foalYear]
     
@@ -81,18 +90,7 @@ build_summary_stats <- function(startDate,
     parentSummary$foalSaleCount <- foalInfo$totalCount[z]
     parentSummary$foalSoldPct <- foalInfo$soldPercent[z]
     
-    colnames(parentSummary) <-  paste(colnames(parentSummary), "PROG", sep = "_")
-    
-    sireYear <- year(as.Date(startDate, origin = '1970-01-01')) - 1
-    sireInfo <- allSires[coverYear == sireYear]
-    
-    z <- match(parentSummary$SIRESTRIP.SUFFIX_PROG, sireInfo$SIRESTRIP.SUFFIX)
-    parentSummary$coverYear <- sireInfo$coverYear[z]
-    parentSummary$coverFee.GBP <- sireInfo$Price.GBP[z]
-    parentSummary$age <- sireInfo$age[z]
-    parentSummary$coverNum <- sireInfo$coverNum[z]
-    
-    colnames(parentSummary) <-  paste(colnames(parentSummary), "SIRE", sep = "_")
+    colnames(parentSummary) <-  paste(colnames(parentSummary), "PROG_SIRE", sep = "_")
     
   }
   
@@ -126,6 +124,10 @@ build_summary_stats <- function(startDate,
     progenySummary[, BTyes := 0]
     progenySummary[ PATplc == 1 | RPRmax >= RATING_BT, BTyes := 1 ]
     
+    # add RPR100 tag
+    progenySummary[, RPR100 := 0]
+    progenySummary[RPRmax >= 100, RPR100 := 1]
+    
     # Best Trip by horse
     z <- match(progenySummary$OHORSEID, progenyOutings[tripBest == 1]$OHORSEID)
     progenySummary$tripBest <- progenyOutings$Distance[z]
@@ -145,8 +147,13 @@ build_summary_stats <- function(startDate,
                                              RPRmax  = max(RPRmax, na.rm=T),
                                              RPRavg  = round(mean(RPRmax, na.rm=T),0),
                                              RPRmin  = min(RPRmax, na.rm=T),
-                                             tripAvg = round(mean(tripBest, na.rm=T),0))
+                                             tripAvg = round(mean(tripBest, na.rm=T),0), 
+                                             RPR100count = sum(RPR100, na.rm=T))
                                       , by = list(DAMSTRIP.SUFFIX)]
+    
+    # Percentage of black type winners
+    parentSummary[, BTpct := round(100*BTcount/runnersRF, 1)]
+    parentSummary[, RPR100pct := round(100*BTcount/runnersRF, 1)]
     
     colnames(parentSummary) <-  paste(colnames(parentSummary), "PROG", sep = "_")
     

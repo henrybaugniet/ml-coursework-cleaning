@@ -19,3 +19,5 @@ CLASS_BIG_LABEL   = c("Class 1", "Class 2", "Class 3", "Class 4", "Class 5", "Cl
 
 EARLY_MONTH <- 7
 RATING_BT <- 100
+
+PREMIUM_SALES <- c('Goffs_Orby', 'Arq_YearlingAug', 'TNew_YearlingBk1Oct')
