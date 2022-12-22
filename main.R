@@ -133,7 +133,7 @@ for (aDate in unique(salesResults$saleDate)) {
   
   z <- match(todaysSummary$SIRESTRIP.SUFFIX, sireInfo$SIRESTRIP.SUFFIX)
   todaysSummary$coverYear_SIRE <- sireInfo$coverYear[z]
-  todaysSummary$coverFee.GBP_SIRE <- sireInfo$Price.GBP[z]
+  todaysSummary$coverFee.GBP_SIRE <- round(sireInfo$Price.GBP[z], 2)
   todaysSummary$age_SIRE <- sireInfo$age[z]
   todaysSummary$coverNum_SIRE <- sireInfo$coverNum[z]
   todaysSummary$priceDiff.GBP_lag1_SIRE <- sireInfo$coverFeeDiff_lag.GBP[z]
@@ -146,7 +146,7 @@ for (aDate in unique(salesResults$saleDate)) {
 }
 
 # convert runners and winners to a percentage for sire 
-totalSummary[, winPctRF := round(100*winnersRF_PROG_SIRE/runnersRF_PROG_SIRE, 1)]
+totalSummary[, winPctRF_PROG_SIRE := round(100*winnersRF_PROG_SIRE/runnersRF_PROG_SIRE, 1)]
 
 # Looks to be quite a few NAs - CHECK
 # Remove all infinities
@@ -212,7 +212,7 @@ useVars <- priceCorTSig$Variable
 useVars <- append(useVars, c('premiumSale', 'consignorScore', 
                              'BTpct_PROG_DAM', 'BTpct_PROG_SIRE', 
                              'priceDiff.GBP_lag1_SIRE', 'RPR100pct_PROG_DAM', 
-                             'RPR100pct_PROG_SIRE', 'winPctRF'))
+                             'RPR100pct_PROG_SIRE', 'winPctRF_PROG_SIRE'))
 
 # replot with useVars
 res <- cor(na.omit(totalSummary_clean[, ..useVars]))
@@ -232,40 +232,88 @@ useVars <- useVars[useVars %!in% dropVars]
 
 continous_data_final <- totalSummary_clean[, ..useVars]
 
-write.csv(continous_data_final, './data/ml-vars.csv', row.names = FALSE)
+colnames(continous_data_final) <-  c("SIRESTRIP.DAMSTRIP.BIRTHYEAR", "SaleDate", "CoverNumSire", "ChosenPriceGbp", 
+                             "RunnersRfProgSire", "LateWnrsProgSire", "PatPlcdProgSire", "RprAvgProgSire",
+                             "TripAvgProgSire", "FoalMedianPriceProgSire", "CoverFeeGbpSire", "PatPlcdProgDam", 
+                             "RprAvgProgDam", "PremiumSale", "BtPctProgSire", "PriceDiffGbpLag1Sire", "Rpr100PctProgDam", 
+                             "Rpr100PctProgSire", "WinPctRfProgSire")
 
-colnames(continous_data_final)
+# % LateWnrsProgSire buckets 
+# % 0 zero 0 
+# % 1 low <50 
+# % 2 high >50
+# 
+# % Price Diff GBP Lag1 Sire
+# % -1 decrease <0 
+# % 0 zero 0 
+# % 1 increase 1
+# 
+# % Rpr100PctProjDam
+# % 0 zero 0 
+# % 1 low <20
+# % 2 high >20
 
-# 1) chosenPrice.GBP put into buckets
-# 2) 
+# Fix a few of my variables 
+continous_data_final[, LateWnrsProgSireBINS := 2]
+continous_data_final[LateWnrsProgSire < 50, LateWnrsProgSireBINS := 1]
+continous_data_final[LateWnrsProgSire == 0, LateWnrsProgSireBINS := 0]
+continous_data_final[is.na(LateWnrsProgSire), LateWnrsProgSireBINS := 0]
 
-# Have seen that the square root of the number of observations is a safe bet?
-BINS <- sqrt(NROW(continous_data_final))
+# Price Diff
+continous_data_final[PriceDiffGbpLag1Sire == 0, PriceDiffGbpLag1SireBINS := 0]
+continous_data_final[is.na(PriceDiffGbpLag1Sire), PriceDiffGbpLag1SireBINS := 0]
+continous_data_final[PriceDiffGbpLag1Sire < 0, PriceDiffGbpLag1SireBINS := -1]
+continous_data_final[PriceDiffGbpLag1Sire > 0, PriceDiffGbpLag1SireBINS := 1]
 
-PRICE_BUCKETS <- BINS
-DEFAULT_BUCKETS <- BINS
+# Rpr100PctProjDam
+continous_data_final[, Rpr100PctProgDamBINS := 2]
+continous_data_final[Rpr100PctProgDam < 40, Rpr100PctProgDamBINS := 1]
+continous_data_final[Rpr100PctProgDam == 0, Rpr100PctProgDamBINS := 0]
+continous_data_final[is.na(Rpr100PctProgDam), Rpr100PctProgDamBINS := 0]
 
-# Price Bins 
-continous_data_final[order(ChosenPrice.GBP), price_BIN:= ceiling(.I/.N*PRICE_BUCKETS)]
+useVars <- c("SIRESTRIP.DAMSTRIP.BIRTHYEAR", "SaleDate", "CoverNumSire", "ChosenPriceGbp", 
+            "RunnersRfProgSire", "LateWnrsProgSireBINS", "PatPlcdProgSire", "RprAvgProgSire",
+            "TripAvgProgSire", "FoalMedianPriceProgSire", "CoverFeeGbpSire", "PatPlcdProgDam", 
+            "RprAvgProgDam", "PremiumSale", "BtPctProgSire", "PriceDiffGbpLag1SireBINS", "Rpr100PctProgDamBINS", 
+            "Rpr100PctProgSire", "WinPctRfProgSire")
 
-# Date Bins
-continous_data_final[, year_BIN := year(saleDate)]
+continous_data_final_save <- continous_data_final[, ..useVars]
 
-# Runners Bins and deal with NAs 
-continous_data_final[is.na(runnersRF_PROG_SIRE), runnersRF_PROG_SIRE := 0]
-continous_data_final[order(runnersRF_PROG_SIRE), runners_RF_SIRE_BIN := ceiling(.I/.N*DEFAULT_BUCKETS)]
-
-# Late winners bins and deal with NAs
-continous_data_final[is.na(lateWnrs_PROG_SIRE), lateWnrs_PROG_SIRE := 0]
-continous_data_final[order(lateWnrs_PROG_SIRE), lateWnrs_SIRE_BIN := ceiling(.I/.N*DEFAULT_BUCKETS)]
-
-# Pattern Placed Sires
-
-
-
-
-
+write.csv(continous_data_final_save, './data/ml-vars.csv', row.names = FALSE)
 
 
+# Some summary stats
+print('Number of sales: ')
+length(unique(salesResults$FileName))
+print('Number of horses')
+NROW(continous_data_final)
+print('Start Date')
+min(salesResults$saleDate)
+print('End date')
+max(salesResults$saleDate)
+print('Max Price')
+max(continous_data_final$ChosenPriceGbp)
+print('Min Price')
+min(continous_data_final$ChosenPriceGbp)
+print('Median Price')
+median(continous_data_final$ChosenPriceGbp)
+
+# Including Ratings
+
+# Maximum rating achieved by each horse 
+# Horses that never run are assigned 30 as max rating
+maxRatings <- cleanOutings[year(ODATE) > 2016, list(RPRmax = max(ORF, na.rm=T), fill = 30), 
+                           by = .(SIRESTRIP.DAMSTRIP.BIRTHYEAR)]
+
+# I am going to have to cut out 2021 and 2022 sales as these horses wont yet have achieved ratings
+ratings_data <- continous_data_final_save
+
+z <- match(ratings_data$SIRESTRIP.DAMSTRIP.BIRTHYEAR, maxRatings$SIRESTRIP.DAMSTRIP.BIRTHYEAR)
+ratings_data$RprMax <- maxRatings$RPRmax[z]
+ratings_data[sapply(ratings_data, is.infinite)] <- NA
+
+ratings_data <- ratings_data[year(SaleDate) < 2021 & !is.na(RprMax)]
+
+write.csv(ratings_data, './data/ratings-data.csv', row.names = FALSE)
 
 
