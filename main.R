@@ -17,8 +17,10 @@ source('./load-clean-outings.R')
 source('./build-summary-stats.R')
 source('./generate-consignor-scores.R')
 
+# Source Names of Catalogs
 catalogController <- build_catalog_controller()
 
+# Only want those for yearlings 
 yearlingCatalogs <- catalogController[flagYearling == TRUE]
 
 # Choose to use only sales that sell exclusively yearlings 
@@ -50,20 +52,10 @@ salesResults[foalingYear < 1000, foalingYear := foalingYear + 2000]
 
 # Get prices for all horses available in GBP
 salesResults <- wrangle_prices(as.data.table(salesResults))
-
-# What do I actually want to use as the final price? 
-# Probably the vendor buyback price ? 
-
 missingData <- salesResults[, lapply(.SD, function(x) sum(is.na(x))), by = .(Sale)]
-
-# Dont get name and country for goffs, this is fine
-# Need foaling years for goffs, this is just missed out for a large number of the sales..
 
 unique(salesResults[is.na(foalingYear)]$FileName)
 # There are 7 goffs sales without the foaling year. These will have to be dropped
-
-# 1) Choose pricing to use
-# 2) consignor wrangling
 
 # Parse all the consignor names
 salesResults$ParsedConsignor <- wrangle_consignor_names(salesResults$Consignor)
@@ -72,7 +64,6 @@ salesResults$ParsedConsignor <- wrangle_consignor_names(salesResults$Consignor)
 consignorSummary <- as.data.table(table(salesResults$ParsedConsignor))
 z <- match(salesResults$ParsedConsignor, consignorSummary$V1)
 salesResults$totalNoConsigned <- consignorSummary$N[z]
-# Probably want to split these into buckets ?
 
 salesResults[, SIRESTRIP.SUFFIX := paste0(SIRESTRIP, '.', SIRESUFFIX)]
 salesResults[, DAMSTRIP.SUFFIX := paste0(DAMSTRIP, '.', DAMSUFFIX)]
@@ -83,8 +74,7 @@ salesResults[, premiumSale := 0]
 salesResults[saleName %in% PREMIUM_SALES, premiumSale := 1]
 salesResults[, saleYear := year(saleDate)]
 
-# Function that takes in the damstrip and suffix and uses this to create a summary of
-# the outings 
+# Functions for wrangling additional datasets
 cleanOutings <- load_clean_outings()
 cleanSires <- load_clean_sires()
 cleanFoals <- load_clean_foals()
@@ -145,19 +135,16 @@ for (aDate in unique(salesResults$saleDate)) {
   }
 }
 
-# convert runners and winners to a percentage for sire 
+# convert runners and winners to a percentage 
 totalSummary[, winPctRF_PROG_SIRE := round(100*winnersRF_PROG_SIRE/runnersRF_PROG_SIRE, 1)]
 
-# Looks to be quite a few NAs - CHECK
 # Remove all infinities
 # Instead of -inf I want NA
 totalSummary[sapply(totalSummary, is.infinite)] <- NA
 totalSummary[sapply(totalSummary, is.na)] <- NA
 
 # There are quite a few Sires for which we do not have information
-# I am going to ignore these and not train my model on them as this is the approach 
-# which I would take in real life
-
+# I am going to ignore these 
 totalSummary_clean <- drop_empty_rows(totalSummary)
 consignorScore <- generate_consignor_scores(totalSummary_clean, cleanOutings)
 
@@ -187,7 +174,6 @@ correlationTestCols <- c("ChosenPrice.GBP", "runnersRF_PROG_SIRE", "winnersRF_PR
                         "BTyes_DAM", "consignorScore")
 
 # Have a look at the correlation for some of my new columns
-
 # Do some correlation tests on the columns
 res <- cor(na.omit(totalSummary_clean[, ..correlationTestCols]))
 priceCor <- as.data.table(res)[1]
@@ -197,13 +183,9 @@ corrplot(res, type = "upper", order = "original",
 # From this it is clear that there are a number of variables with next to no correlation
 # These are the ones that we are likely going to drop from the model 
 
-# Use the log of prices
-
 saveRDS(totalSummary_clean, './data/totalSummary_clean.RDS')
 
 # Export tidy variables for matlab algo's 
-# Do I need to use logs of prices for naive bayes and random forest?
-
 priceCorT <- data.table(colnames(priceCor), t(priceCor))
 colnames(priceCorT) <- c('Variable', 'Coefficient')
 priceCorTSig <- priceCorT[Coefficient > 0.2]
@@ -237,6 +219,8 @@ colnames(continous_data_final) <-  c("SIRESTRIP.DAMSTRIP.BIRTHYEAR", "SaleDate",
                              "TripAvgProgSire", "FoalMedianPriceProgSire", "CoverFeeGbpSire", "PatPlcdProgDam", 
                              "RprAvgProgDam", "PremiumSale", "BtPctProgSire", "PriceDiffGbpLag1Sire", "Rpr100PctProgDam", 
                              "Rpr100PctProgSire", "WinPctRfProgSire")
+
+# No data leakage as buckets are determined at a fixed value. 
 
 # % LateWnrsProgSire buckets 
 # % 0 zero 0 
@@ -280,7 +264,6 @@ useVars <- c("SIRESTRIP.DAMSTRIP.BIRTHYEAR", "SaleDate", "CoverNumSire", "Chosen
 continous_data_final_save <- continous_data_final[, ..useVars]
 
 write.csv(continous_data_final_save, './data/ml-vars.csv', row.names = FALSE)
-
 
 # Some summary stats
 print('Number of sales: ')
